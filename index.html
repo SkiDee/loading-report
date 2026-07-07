@@ -61,10 +61,10 @@
   .tag-chip{flex:0 0 auto;font-size:12px;padding:5px 10px;border-radius:16px;background:var(--ink);border:1px solid var(--line);color:var(--paper-dim);cursor:pointer;white-space:nowrap;}
   .tag-chip.selected{border-color:var(--amber);color:var(--amber);}
   textarea#issuesText{
-    width:100%;min-height:120px;background:transparent;border:none;color:var(--paper);font-size:15px;line-height:1.4;resize:vertical;padding:2px;
+    width:100%;min-height:120px;background:transparent;border:none;color:var(--paper);font-size:15px;line-height:1.4;resize:none;padding:2px;
   }
   textarea#issuesText:focus{outline:none;}
-  .issues-footer{display:flex;justify-content:flex-end;margin-top:6px;}
+  .issues-footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px;}
 
   .btnrow{display:flex;gap:10px;margin-top:22px;}
   button.primary{
@@ -141,6 +141,8 @@
       <div class="issue-tagbar" id="tagBar"></div>
       <textarea id="issuesText" placeholder="Tap a round above to tag a note, or just speak / type freely..."></textarea>
       <div class="issues-footer">
+        <button class="ghost" id="shrinkBtn" style="padding:8px 12px;">Box smaller</button>
+        <button class="ghost" id="growBtn" style="padding:8px 12px;">Box bigger</button>
         <button class="mic-btn" id="issuesMic">🎤</button>
       </div>
     </div>
@@ -421,6 +423,16 @@ function startDictation(btnEl, onFinal){
   try{ rec.start(); }catch(err){ btnEl.classList.remove('live'); }
 }
 
+$('growBtn').addEventListener('click', ()=>{
+  const ta = $('issuesText');
+  const current = parseInt(ta.style.height || '120', 10) || 120;
+  ta.style.height = Math.min(current + 80, 600) + 'px';
+});
+$('shrinkBtn').addEventListener('click', ()=>{
+  const ta = $('issuesText');
+  const current = parseInt(ta.style.height || '120', 10) || 120;
+  ta.style.height = Math.max(current - 80, 120) + 'px';
+});
 $('issuesMic').addEventListener('click', ()=>{
   startDictation($('issuesMic'), (text)=>{
     const ta = $('issuesText');
