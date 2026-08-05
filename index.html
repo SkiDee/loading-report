@@ -44,9 +44,13 @@
   .lastvan{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;}
   .lastvan input{font-size:20px;width:110px;}
 
-  .round-row{display:flex;align-items:center;gap:10px;background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;}
-  .swatch{width:16px;height:16px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(255,255,255,.25);}
-  .round-name{width:78px;flex:0 0 auto;font-size:14px;font-weight:600;}
+  .round-row{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;}
+  .round-row-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .swatch{width:14px;height:14px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(255,255,255,.25);}
+  .round-name{font-size:14px;font-weight:700;}
+  .sub-field-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .sub-field-row:last-child{margin-bottom:0;}
+  .sub-field-label{width:64px;flex:0 0 auto;font-size:11px;color:var(--paper-dim);text-transform:uppercase;letter-spacing:.04em;}
   .driver-input{flex:1;background:transparent;border:none;border-bottom:1px solid var(--line);color:var(--paper);font-size:15px;padding:6px 2px;min-width:0;}
   .driver-input:focus{outline:none;border-bottom-color:var(--amber);}
   .mic-btn{
@@ -115,6 +119,15 @@
       <span class="pill" id="dayTypeBadge">—</span>
       <span class="pill" id="toggleDayType" style="cursor:pointer;">Switch to Sat rounds</span>
       <span id="autosaveNote" style="font-size:11px;color:var(--paper-dim);opacity:.5;margin-left:auto;"></span>
+    </div>
+    <div class="datebar" style="margin-top:8px;">
+      <label class="field-label" style="margin:0;">Scope (orders today)</label>
+      <input type="number" inputmode="numeric" id="scopeInput" min="0" style="width:80px;background:var(--ink2);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:6px 8px;font-size:14px;">
+    </div>
+    <div class="datebar" style="margin-top:6px;">
+      <label class="field-label" style="margin:0;">Vans departed</label>
+      <input type="number" inputmode="numeric" id="vansDepartedInput" min="0" style="width:80px;background:var(--ink2);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:6px 8px;font-size:14px;">
+      <span class="pill" id="autofillVansBtn" style="cursor:pointer;">Auto-fill from rounds</span>
     </div>
   </header>
 
@@ -218,7 +231,7 @@ let state = {
   date: new Date().toISOString().slice(0,10),
   dayType: 'weekday', // or 'saturday'
   lastVanOut: '',
-  rounds: {}, // name -> {driver, color}
+  rounds: {}, // id -> {driver, vanReg, stops}
   issuesText: '',
   config: { weekday: [], saturday: [] }
 };
@@ -344,37 +357,59 @@ function renderRoundsList(){
     list.innerHTML = `<p class="empty-note">No rounds set up for ${state.dayType==='saturday'?'Saturday':'weekdays'} yet. Tap "Edit rounds" to add them.</p>`;
     return;
   }
+  const esc = (v)=> (v||'').toString().replace(/"/g,'&quot;');
   list.innerHTML = defs.map(r=>{
-    const driver = (state.rounds[r.id] && state.rounds[r.id].driver) || '';
+    const data = state.rounds[r.id] || {};
     return `
     <div class="round-row" data-round="${r.id}">
-      <span class="swatch" style="background:${r.color}"></span>
-      <span class="round-name">${r.name}</span>
-      <input class="driver-input" type="text" placeholder="Driver name" value="${driver.replace(/"/g,'&quot;')}">
-      <button class="mic-btn" data-role="round-mic">🎤</button>
+      <div class="round-row-head">
+        <span class="swatch" style="background:${r.color}"></span>
+        <span class="round-name">${r.name}</span>
+      </div>
+      <div class="sub-field-row">
+        <span class="sub-field-label">Driver</span>
+        <input class="driver-input" data-field="driver" type="text" placeholder="Driver name" value="${esc(data.driver)}">
+        <button class="mic-btn" data-role="mic" data-field="driver">🎤</button>
+      </div>
+      <div class="sub-field-row">
+        <span class="sub-field-label">Van reg</span>
+        <input class="driver-input" data-field="vanReg" type="text" placeholder="e.g. AB12 CDE" value="${esc(data.vanReg)}">
+        <button class="mic-btn" data-role="mic" data-field="vanReg">🎤</button>
+      </div>
+      <div class="sub-field-row">
+        <span class="sub-field-label">Stops</span>
+        <input class="driver-input" data-field="stops" type="number" inputmode="numeric" min="0" placeholder="No. of stops" value="${esc(data.stops)}">
+        <button class="mic-btn" data-role="mic" data-field="stops">🎤</button>
+      </div>
     </div>`;
   }).join('');
 
   list.querySelectorAll('.round-row').forEach(row=>{
     const id = row.dataset.round;
-    const input = row.querySelector('.driver-input');
-    input.addEventListener('input', ()=>{
-      state.rounds[id] = state.rounds[id] || {};
-      state.rounds[id].driver = input.value;
-      autosaveDraft();
+    row.querySelectorAll('input[data-field]').forEach(input=>{
+      const field = input.dataset.field;
+      input.addEventListener('input', ()=>{
+        state.rounds[id] = state.rounds[id] || {};
+        state.rounds[id][field] = input.value;
+        autosaveDraft();
+      });
     });
-    const micBtn = row.querySelector('[data-role=round-mic]');
-    micBtn.addEventListener('click', ()=> startDictation(micBtn, (text)=>{
-      input.value = (input.value ? input.value+' ' : '') + text;
-      input.dispatchEvent(new Event('input'));
-    }));
+    row.querySelectorAll('[data-role=mic]').forEach(micBtn=>{
+      const field = micBtn.dataset.field;
+      const input = row.querySelector(`input[data-field="${field}"]`);
+      micBtn.addEventListener('click', ()=> startDictation(micBtn, (text)=>{
+        input.value = (input.value ? input.value+' ' : '') + text;
+        input.dispatchEvent(new Event('input'));
+      }));
+    });
   });
 }
 
 function renderTagBar(){
   const bar = $('tagBar');
   const defs = currentRoundDefs();
-  bar.innerHTML = defs.map(r=>`<span class="tag-chip" data-round="${r.id}" data-name="${r.name}">${r.name}</span>`).join('');
+  const generalChip = `<span class="tag-chip" data-name="General">General</span>`;
+  bar.innerHTML = generalChip + defs.map(r=>`<span class="tag-chip" data-round="${r.id}" data-name="${r.name}">${r.name}</span>`).join('');
   bar.querySelectorAll('.tag-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       const ta = $('issuesText');
@@ -383,6 +418,7 @@ function renderTagBar(){
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
       state.issuesText = ta.value;
+      autosaveDraft();
     });
   });
 }
@@ -443,6 +479,15 @@ $('issuesMic').addEventListener('click', ()=>{
 });
 $('issuesText').addEventListener('input', (e)=>{ state.issuesText = e.target.value; autosaveDraft(); });
 $('lastVanOut').addEventListener('input', ()=> autosaveDraft());
+$('scopeInput').addEventListener('input', ()=> autosaveDraft());
+$('vansDepartedInput').addEventListener('input', ()=> autosaveDraft());
+$('autofillVansBtn').addEventListener('click', ()=>{
+  const defs = currentRoundDefs();
+  const count = defs.filter(r => state.rounds[r.id] && (state.rounds[r.id].driver||'').trim() !== '').length;
+  $('vansDepartedInput').value = count;
+  autosaveDraft();
+  toast(`Set to ${count} vans with a driver entered`);
+});
 
 // ---------- day type / date ----------
 function refreshDayTypeUI(){
@@ -532,15 +577,19 @@ async function loadDraftForDate(){
   state.rounds = {};
   $('issuesText').value = '';
   $('lastVanOut').value = '';
+  $('scopeInput').value = '';
+  $('vansDepartedInput').value = '';
   if(existing && existing.dayType === state.dayType){
     $('lastVanOut').value = existing.lastVanOut || '';
+    $('scopeInput').value = existing.scope || '';
+    $('vansDepartedInput').value = existing.vansDeparted || '';
     $('issuesText').value = existing.issuesText || '';
     state.issuesText = existing.issuesText || '';
     const defs = currentRoundDefs();
     const used = new Set();
     (existing.rounds||[]).forEach(er=>{
       const match = defs.find(d=> d.name === er.name && !used.has(d.id));
-      if(match){ used.add(match.id); state.rounds[match.id] = { driver: er.driver }; }
+      if(match){ used.add(match.id); state.rounds[match.id] = { driver: er.driver, vanReg: er.vanReg, stops: er.stops }; }
     });
   }
 }
@@ -566,42 +615,99 @@ $('copyPrevBtn').addEventListener('click', async ()=>{
       used.add(match.id);
       state.rounds[match.id] = state.rounds[match.id] || {};
       state.rounds[match.id].driver = pr.driver;
+      state.rounds[match.id].vanReg = pr.vanReg;
+      // No of Stops is left blank on purpose — it varies day to day even if the driver/van don't.
     }
   });
   renderRoundsList();
   autosaveDraft();
-  toast(`Copied drivers from ${fmtDateUK(prev.date)}`);
+  toast(`Copied drivers & van regs from ${fmtDateUK(prev.date)}`);
 });
 
 // ---------- generate / save ----------
 function buildReportObject(){
   const defs = currentRoundDefs();
-  const rounds = defs.map(r=>({
-    name: r.name,
-    color: r.color,
-    driver: (state.rounds[r.id] && state.rounds[r.id].driver) || ''
-  }));
+  const rounds = defs.map(r=>{
+    const d = state.rounds[r.id] || {};
+    return {
+      name: r.name,
+      color: r.color,
+      driver: d.driver || '',
+      vanReg: d.vanReg || '',
+      stops: d.stops || ''
+    };
+  });
   return {
     date: state.date,
     dayType: state.dayType,
     lastVanOut: $('lastVanOut').value,
+    scope: $('scopeInput').value,
+    vansDeparted: $('vansDepartedInput').value,
     rounds,
     issuesText: $('issuesText').value
   };
 }
+function countIssues(issuesText){
+  return issuesText.split('\n').map(l=>l.trim()).filter(l=>l.length>0).length;
+}
+function formatIssuesForWhatsApp(issuesText){
+  // Turn "[Tag] rest of line" into a bold "*Tag:* rest of line" for WhatsApp
+  return issuesText.split('\n').map(line=>{
+    const m = line.match(/^\[(.+?)\]\s*(.*)$/);
+    if(m) return `*${m[1]}:* ${m[2]}`;
+    return line;
+  }).join('\n');
+}
+function centerPad(str, width){
+  const totalPad = Math.max(width - str.length, 0);
+  const left = Math.floor(totalPad / 2);
+  const right = totalPad - left;
+  return ' '.repeat(left) + str + ' '.repeat(right);
+}
+function buildVansTable(rounds){
+  const headers = ['Colour Out', 'Driver Name', 'Van Reg', 'No of Stops'];
+  const rows = rounds.map(r => [
+    r.name,
+    r.driver || '—',
+    r.vanReg || '—',
+    (r.stops || '—').toString()
+  ]);
+  const widths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map(row => row[i].length))
+  );
+  const padRow = (cells) => cells.map((c, i) => centerPad(c, widths[i])).join(' | ').trimEnd();
+  const lines = ['```'];
+  lines.push(padRow(headers));
+  rows.forEach(row => lines.push(padRow(row)));
+  lines.push('```');
+  return lines;
+}
+
 function reportToText(rep){
   const lines = [];
-  lines.push('End of Loading Report');
-  lines.push(`Dispatch Date: ${fmtDateUK(rep.date)}`);
-  lines.push(`Last Van Out: ${rep.lastVanOut || '—'}`);
+  lines.push('*End of Loading Report*');
   lines.push('');
-  lines.push('Vans Out:        Driver Name');
-  rep.rounds.forEach(r=>{
-    lines.push(`${r.name.padEnd(16)} ${r.driver || '—'}`);
-  });
+  lines.push(`*Run Out Date:* ${fmtDateUK(rep.date)}`);
+  lines.push(`*Last Van Out:* ${rep.lastVanOut || '—'}`);
+  lines.push(`*Scope:* ${rep.scope || '—'} orders`);
+  lines.push(`*Vans Departed:* ${rep.vansDeparted || '—'}`);
   lines.push('');
-  lines.push('Issues/Notes:');
-  lines.push(rep.issuesText.trim() ? rep.issuesText.trim() : 'None.');
+  lines.push(...buildVansTable(rep.rounds));
+  lines.push('');
+
+  const issuesTrimmed = rep.issuesText.trim();
+  const issueCount = issuesTrimmed ? countIssues(issuesTrimmed) : 0;
+  const scopeNum = parseInt(rep.scope, 10);
+  const nonIssueCount = isNaN(scopeNum) ? '—' : Math.max(scopeNum - issueCount, 0);
+
+  lines.push('```');
+  lines.push(`Out of ${rep.scope || '—'} Stops`);
+  lines.push(`${nonIssueCount} loaded with no stock issues`);
+  lines.push(`${issueCount} issues below`);
+  lines.push('```');
+  lines.push('');
+  lines.push('*Issues/Notes:*');
+  lines.push(issuesTrimmed ? formatIssuesForWhatsApp(issuesTrimmed) : 'None.');
   return lines.join('\n');
 }
 
